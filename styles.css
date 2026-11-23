@@ -140,6 +140,7 @@ button { color: inherit; cursor: pointer; }
 .control-button:active, .control-button.pressed { color: #122016; border-color: var(--lime); background: var(--lime); }
 .steer-button { min-width: 69px; font-size: 23px; }
 .brake-button { border-color: rgba(255,146,82,.55); color: #ffb17f; }
+.handbrake-button { min-width: 60px; height: 46px; border-color: rgba(235,240,231,.34); color: #d4dfd2; font-size: 8px; }
 .reverse-button { min-width: 48px; height: 48px; font-size: 9px; }
 .throttle-button { min-width: 95px; height: 72px; border-color: rgba(197,243,107,.55); color: var(--lime); }
 .throttle-button span { font-size: 15px; }
@@ -204,6 +205,7 @@ button { color: inherit; cursor: pointer; }
   .control-button { min-width: 50px; height: 51px; font-size: 9px; }
   .steer-button { min-width: 54px; font-size: 20px; }
   .reverse-button { min-width: 39px; height: 42px; }
+  .handbrake-button { min-width: 48px; height: 42px; font-size: 7px; }
   .throttle-button { min-width: 72px; height: 62px; }
   .brake-button { min-width: 58px; }
 }
