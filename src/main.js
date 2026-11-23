@@ -23,6 +23,8 @@ const state = {
   gear: 1,
   distance: 0,
   wheelSpin: 0,
+  bodyPitch: 0,
+  bodyRoll: 0,
   cameraMode: 0,
   lastTime: 0,
   fpsSamples: [],
@@ -175,24 +177,24 @@ function roadDistance(x, z) {
   }
   return Math.sqrt(min);
 }
-for (let i = 0; i < 260; i++) {
+for (let i = 0; i < 145; i++) {
   const x = (Math.random()-.5)*300, z = (Math.random()-.5)*300;
   if (roadDistance(x,z) < 10 || Math.hypot(x,z) < 9) continue;
   const h = terrainHeight(x,z);
   const tree = new THREE.Group();
-  const trunk = new THREE.Mesh(trunkGeo,trunkMat); trunk.position.y=1.05; trunk.castShadow=true; tree.add(trunk);
+  const trunk = new THREE.Mesh(trunkGeo,trunkMat); trunk.position.y=1.05; trunk.castShadow=false; tree.add(trunk);
   const leaves = new THREE.Mesh(leafGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);
-  leaves.position.y=3.15; leaves.scale.setScalar(.72+Math.random()*.62); leaves.castShadow=true; tree.add(leaves);
+  leaves.position.y=3.15; leaves.scale.setScalar(.72+Math.random()*.62); leaves.castShadow=false; tree.add(leaves);
   tree.position.set(x,h,z); tree.rotation.y=Math.random()*Math.PI*2; tree.scale.setScalar(.75+Math.random()*.8);
   foliageGroup.add(tree);
 }
-for (let i = 0; i < 105; i++) {
+for (let i = 0; i < 60; i++) {
   const x=(Math.random()-.5)*180, z=(Math.random()-.5)*180;
   if (roadDistance(x,z)<8) continue;
   const rock=new THREE.Mesh(rockGeo,rockMats[Math.floor(Math.random()*rockMats.length)]);
   const s=.3+Math.random()*1.05;
   rock.position.set(x,terrainHeight(x,z)+s*.35,z); rock.scale.set(s*1.4,s*.72,s);
-  rock.rotation.set(Math.random(),Math.random()*3,Math.random()); rock.castShadow=true; rock.receiveShadow=true;
+  rock.rotation.set(Math.random(),Math.random()*3,Math.random()); rock.castShadow=false; rock.receiveShadow=true;
   foliageGroup.add(rock);
 }
 
@@ -431,12 +433,12 @@ function drawDyno() {
   for(let i=0;i<=4;i++) {
     const y=pad.t+i*ih/4;
     ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();
-    ctx.fillText(String(Math.round(9000-i*2250)),2,y+4);
+    ctx.fillText(String(100-i*25)+'%',2,y+4);
   }
   for(let i=0;i<=4;i++) {
     const x=pad.l+i*iw/4;
     ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,h-pad.b);ctx.stroke();
-    ctx.fillText(String(i*2000),x-10,h-7);
+    ctx.fillText(String(Math.round(i*state.vehicle.rpmLimit/4)),x-14,h-7);
   }
   const maxHp=Math.max(250,engineStats().hp*1.25), maxTq=Math.max(500,engineStats().peakTorque*1.25);
   const hpPts=[], tqPts=[];
@@ -541,10 +543,12 @@ function updatePhysics(dt) {
   state.gear=1;
   for(let i=1;i<thresholds.length;i++) if(mph>thresholds[i]) state.gear=i+1;
   state.gear=clamp(state.gear,1,6);
-  const rpmBase=900+(mph/Math.max(.7,[3.25,2.18,1.54,1.16,.88,.69][state.gear-1]))*62*(v.finalDrive/3.73);
+  const rpmBase=900+(mph/Math.max(.7,[3.25,2.18,1.54,1.16,.88,.69][state.gear-1]))*62*(v.finalDrive/3.73)*(.59/v.tireRadius);
   state.rpm=clamp(rpmBase+throttle*340,850,v.rpmLimit);
   const nearTrail=roadDistance(vehicleRoot.position.x,vehicleRoot.position.z);
-  const traction=nearTrail<6.5?.9:nearTrail<18?.7:.56;
+  const baseTraction=nearTrail<6.5?.9:nearTrail<18?.7:.56;
+  const tireGrip=clamp(.78+(v.tireWidth-.22)*1.2,.78,1.08);
+  const traction=baseTraction*tireGrip;
   const surface=nearTrail<6.5?'PACKED DIRT':nearTrail<18?'LOOSE GRAVEL':'SOFT GROUND';
   $('surfaceValue').textContent=surface;
   $('tractionValue').textContent='GRIP '+Math.round(traction*100)+'%';
@@ -561,7 +565,7 @@ function updatePhysics(dt) {
   state.speed+=acceleration*dt;
   state.speed=clamp(state.speed,-10,55);
   const speedFactor=clamp(Math.abs(state.speed)/3.2,.12,1);
-  const steerRate=(.24+Math.abs(state.speed)*.034)*(1+(inp.handbrake?.8:0));
+  const steerRate=(.24+Math.abs(state.speed)*.034)*(1+(inp.handbrake ? .8 : 0));
   state.yaw+=steer*steerRate*speedFactor*dt*(state.speed<-.2?-1:1);
   const forwardX=-Math.sin(state.yaw), forwardZ=-Math.cos(state.yaw);
   vehicleRoot.position.x+=forwardX*state.speed*dt;
@@ -582,10 +586,14 @@ function updatePhysics(dt) {
   const left=(wheelGround[0]+wheelGround[2])*.5, right=(wheelGround[1]+wheelGround[3])*.5;
   const average=wheelGround.reduce((a,b)=>a+b,0)/4;
   const springFactor=clamp(v.springRate/48,.55,1.8);
-  const pitch=Math.atan2(front-rear,2.76)*.8;
-  const roll=Math.atan2(left-right,2.24)*.75*(v.swaybar===0?1.25:1.0-v.swaybar/180);
+  const targetPitch=Math.atan2(front-rear,2.76)*(.78/springFactor);
+  const targetRoll=Math.atan2(left-right,2.24)*(.75/springFactor)*(v.swaybar===0?1.25:1.0-v.swaybar/180);
+  const damping=clamp((v.compressionDamping+v.reboundDamping)/6800,.25,2.0);
+  const settle=1-Math.exp(-dt*(1.6+damping*.75));
+  state.bodyPitch=lerp(state.bodyPitch,targetPitch,settle);
+  state.bodyRoll=lerp(state.bodyRoll,targetRoll,settle);
   vehicleRoot.position.y=average+.98+v.rideHeight;
-  vehicleRoot.rotation.set(pitch, state.yaw, roll);
+  vehicleRoot.rotation.set(state.bodyPitch, state.yaw, state.bodyRoll);
   wheelGround.forEach((height,i)=>{
     const localDelta=(height-average);
     wheelGroups[i].position.y=-.48+clamp(localDelta*.62,-v.travel*.48,v.travel*.48);
