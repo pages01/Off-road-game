@@ -232,3 +232,43 @@ button { color: inherit; cursor: pointer; }
 .trial-card strong { color:var(--lime); font:700 27px var(--display); }
 .trial-card span { color:#d4dfd4; font:9px var(--mono); letter-spacing:.7px; }
 @media(max-width:760px) { .trial-card { top:84px; left:12px; min-width:138px; padding:9px 11px; } .trial-card strong { font-size:23px; } }
+
+
+/* Real-vehicle reference photograph in the garage */
+.vehicle-photo-card {
+  margin: 0 0 17px;
+  overflow: hidden;
+  border: 1px solid rgba(225,240,225,.14);
+  background: #101a19;
+}
+.vehicle-photo-card img {
+  display: block;
+  width: 100%;
+  height: clamp(125px, 22vh, 190px);
+  object-fit: cover;
+  object-position: center 58%;
+  filter: saturate(.9) contrast(1.04);
+}
+.vehicle-photo-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px 10px;
+  color: #9aab9f;
+  font: 8px var(--mono);
+  line-height: 1.45;
+  letter-spacing: .35px;
+}
+.vehicle-photo-caption strong {
+  color: var(--lime);
+  font-size: 8px;
+  letter-spacing: .65px;
+}
+.vehicle-photo-caption a {
+  color: #d5e2d4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .vehicle-photo-card img { height: 145px; }
+}
