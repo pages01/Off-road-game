@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trailforge-shell-v1';
+const CACHE_NAME = 'trailforge-shell-v2';
 const SHELL = [
   './',
   './index.html',
