@@ -1,0 +1,14 @@
+{
+  "name": "Trailforge — Off-road Engineering",
+  "short_name": "Trailforge",
+  "description": "A personal off-road driving and vehicle engineering sandbox.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#101719",
+  "theme_color": "#101719",
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
