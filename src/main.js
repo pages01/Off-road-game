@@ -6,6 +6,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const defaults = {
   vehicle: {
     paint: '#a7c96c', mass: 2050, tireRadius: 0.59, tireWidth: 0.32, finalDrive: 3.73,
+    tireType: 'allTerrain', drivetrain: '4wd', diffLock: 'open',
     cylinders: 8, bore: 96, stroke: 92, compression: 10.2, boost: 5, cam: 42, rpmLimit: 6200, tune: 100,
     springRate: 48, compressionDamping: 2900, reboundDamping: 3900, rideHeight: 0.34, travel: 0.28, swaybar: 32
   },
@@ -66,7 +67,63 @@ sun.shadow.camera.top = 90; sun.shadow.camera.bottom = -90;
 sun.shadow.normalBias = 0.04;
 scene.add(sun);
 
+async function loadRealElevationTile() {
+  const z = 15, x = 5108, y = 12373;
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  const loaded = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Elevation tile timed out")), 6500);
+    img.onload = () => { clearTimeout(timeout); resolve(); };
+    img.onerror = () => { clearTimeout(timeout); reject(new Error("Elevation tile unavailable")); };
+  });
+  img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+  await loaded;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const pixels = ctx.getImageData(0, 0, 256, 256).data;
+  const lat = 40.2669523051;
+  const tileMeters = 40075016.6856 * Math.cos(lat * Math.PI / 180) / (2 ** z);
+  const elevationAt = (px, py) => {
+    const ix = clamp(px, 0, 255), iy = clamp(py, 0, 255);
+    const x0 = Math.floor(ix), y0 = Math.floor(iy);
+    const x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1);
+    const fx = ix - x0, fy = iy - y0;
+    const read = (xx, yy) => {
+      const p = (yy * 256 + xx) * 4;
+      return (pixels[p] * 256 + pixels[p + 1] + pixels[p + 2] / 256) - 32768;
+    };
+    const top = lerp(read(x0, y0), read(x1, y0), fx);
+    const bottom = lerp(read(x0, y1), read(x1, y1), fx);
+    return lerp(top, bottom, fy);
+  };
+  const centerU = 128, centerV = 128;
+  return {
+    elevationAt,
+    tileMeters,
+    baseElevation: elevationAt(centerU, centerV),
+    // The 256 px tile is real elevation data, not a generated noise field.
+    source: "AWS Open Data / Mapzen Terrarium DEM"
+  };
+}
+let realElevation = null;
+try {
+  $('statusText').textContent = 'LOADING REAL TERRAIN';
+  realElevation = await loadRealElevationTile();
+  $('statusText').textContent = 'REAL DEM TERRAIN READY';
+} catch (error) {
+  console.warn('Real elevation could not be loaded; using local fallback terrain.', error);
+  $('statusText').textContent = 'OFFLINE TERRAIN MODE';
+}
 function terrainHeight(x, z) {
+  if (realElevation) {
+    // World origin is the centre of the DEM tile. Game metres are mapped to DEM pixels.
+    const px = 128 + x / realElevation.tileMeters * 256;
+    const py = 128 + z / realElevation.tileMeters * 256;
+    // Vertical exaggeration keeps real topography legible at game scale.
+    return (realElevation.elevationAt(px, py) - realElevation.baseElevation) * 0.34;
+  }
   return 0.5 * Math.sin(x * 0.035) * Math.cos(z * 0.029)
     + 0.28 * Math.sin((x + z) * 0.061)
     + 0.18 * Math.cos((x - z) * 0.083)
@@ -271,9 +328,12 @@ function createWheel(x, z, index) {
   hub.rotation.z=Math.PI/2; group.add(hub);
   const hubCap = new THREE.Mesh(new THREE.CylinderGeometry(radius*.16,radius*.16,width*1.1,12),trimMaterial);
   hubCap.rotation.z=Math.PI/2; group.add(hubCap);
-  for(let t=0;t<18;t++){
-    const tread = new THREE.Mesh(new THREE.BoxGeometry(width*1.02,.075,.11),trimMaterial);
-    const a=t/18*Math.PI*2;
+  const treadCount = state.vehicle.tireType === 'mudTerrain' ? 14 : state.vehicle.tireType === 'rockCrawler' ? 22 : 18;
+  for(let t=0;t<treadCount;t++){
+    const lugWidth = state.vehicle.tireType === 'mudTerrain' ? width * 1.08 : width * 1.02;
+    const lugDepth = state.vehicle.tireType === 'rockCrawler' ? .14 : .11;
+    const tread = new THREE.Mesh(new THREE.BoxGeometry(lugWidth,.075,lugDepth),trimMaterial);
+    const a=t/treadCount*Math.PI*2;
     tread.position.set(0,Math.sin(a)*radius*.86,Math.cos(a)*radius*.86);
     tread.rotation.x=a; group.add(tread);
   }
@@ -383,11 +443,16 @@ function renderPanel(tab='build') {
   document.querySelectorAll('.garage-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   let html='';
   if(tab==='build') {
-    html='<div class="panel-section-title">CHASSIS & EXTERIOR <small>MODULAR BUILD</small></div><div class="field-grid">'+
+    html='<div class="panel-section-title">CHASSIS & EXTERIOR <small>MODULAR BUILD</small></div>'+
+      '<div class="vehicle-photo-card"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Off_Road_vehicle.jpg/960px-Off_Road_vehicle.jpg" alt="Real Suzuki Jimny off-road vehicle reference photograph" loading="lazy"><div class="vehicle-photo-caption"><strong>REAL VEHICLE REFERENCE · SUZUKI JIMNY SIERRA</strong><span>Photo: Rudyasho · CC BY 4.0 · <a href="https://commons.wikimedia.org/wiki/File:Off_Road_vehicle.jpg" target="_blank" rel="noopener">Image source & license</a></span></div></div>'+
+      '<div class="field-grid">'+
       '<div class="field full"><div class="field-top"><label for="f-paint">BODY COLOUR</label><output>LIVE PREVIEW</output></div><input id="f-paint" type="color" value="'+state.vehicle.paint+'" data-group="vehicle" data-key="paint"></div>'+
       field('mass','Vehicle mass',1350,3300,10,' kg',false)+
       field('tireRadius','Tire radius',.43,.82,.01,' m')+
       field('tireWidth','Tire width',.22,.48,.01,' m')+
+      selectField('tireType','Tire compound / tread', [['allTerrain','All-terrain'],['mudTerrain','Mud-terrain'],['rockCrawler','Rock crawler']])+
+      selectField('drivetrain','Drivetrain', [['2wd','2WD · rear drive'],['4wd','4WD · high range'],['4lo','4WD · low range']])+
+      selectField('diffLock','Differential', [['open','Open differential'],['locked','Locked differential']])+
       field('finalDrive','Final drive ratio',2.7,5.4,.01,' : 1')+
       '</div><div class="info-strip"><strong>LIVE ENGINEERING:</strong> Tire dimensions, vehicle mass and gearing feed directly into the driving model. Save a build to keep your settings on this device.</div>';
   } else if(tab==='engine') {
@@ -472,12 +537,14 @@ function drawDyno() {
 $('panelContent').addEventListener('input',(event)=>{
   const el=event.target; if(!el.dataset.key) return;
   const group=el.dataset.group||'vehicle', key=el.dataset.key;
-  const value=el.type==='color'?el.value:(el.tagName==='SELECT'?Number(el.value):Number(el.value));
+  const value=el.type==='color' ? el.value : (el.tagName==='SELECT'
+    ? (Number.isFinite(Number(el.value)) && el.value.trim() !== '' ? Number(el.value) : el.value)
+    : Number(el.value));
   state[group][key]=value;
   const output=$('o-'+key);
   if(output) output.textContent=(key==='mass'?Math.round(value).toLocaleString('en-US'):Number(value).toFixed((key==='rideHeight'||key==='travel'||key==='tireRadius'||key==='tireWidth')?2:(key==='compression'||key==='boost'||key==='finalDrive'?1:0)))+(key==='mass'?' kg':key==='tireRadius'||key==='tireWidth'||key==='rideHeight'||key==='travel'?' m':key==='springRate'?' kN/m':key==='compression'?' : 1':key==='boost'?' PSI':key==='finalDrive'?' : 1':key==='rpmLimit'?' RPM':key==='compressionDamping'||key==='reboundDamping'?' N·s/m':key==='cam'||key==='swaybar'||key==='tune'?' %':'');
   if(key==='paint') setVehiclePaint();
-  if(key==='tireRadius'||key==='tireWidth') rebuildWheels();
+  if(key==='tireRadius'||key==='tireWidth'||key==='tireType') rebuildWheels();
   if(group==='graphics') applyGraphics();
   if($('dynoCanvas')) { updateDynoMetrics(); drawDyno(); }
   if($('suspensionTravel')) updateSuspensionMetrics();
@@ -566,23 +633,37 @@ function updatePhysics(dt) {
   state.rpm=clamp(rpmBase+throttle*340,850,v.rpmLimit);
   const nearTrail=roadDistance(vehicleRoot.position.x,vehicleRoot.position.z);
   const baseTraction=nearTrail<6.5?.9:nearTrail<18?.7:.56;
-  const tireGrip=clamp(.78+(v.tireWidth-.22)*1.2,.78,1.08);
-  const traction=baseTraction*tireGrip;
-  const surface=nearTrail<6.5?'PACKED DIRT':nearTrail<18?'LOOSE GRAVEL':'SOFT GROUND';
-  $('surfaceValue').textContent=surface;
-  $('tractionValue').textContent='GRIP '+Math.round(traction*100)+'%';
+  const surfaceKey = nearTrail < 6.5 ? 'dirt' : nearTrail < 18 ? 'gravel' : 'soft';
+  const surface = surfaceKey === 'dirt' ? 'PACKED DIRT' : surfaceKey === 'gravel' ? 'LOOSE GRAVEL' : 'SOFT GROUND';
+  const tireProfiles = {
+    allTerrain: { dirt: 1.00, gravel: .88, soft: .76 },
+    mudTerrain: { dirt: .91, gravel: .96, soft: 1.12 },
+    rockCrawler: { dirt: 1.04, gravel: .90, soft: .68 }
+  };
+  const tireGrip = tireProfiles[v.tireType]?.[surfaceKey] ?? 1;
+  const widthGrip = clamp(.88 + (v.tireWidth - .22) * .92, .88, 1.12);
+  const drivenAxleGrip = v.drivetrain === '2wd' ? .77 : 1.0;
+  const lockerGrip = v.diffLock === 'locked' ? (surfaceKey === 'dirt' ? 1.02 : 1.13) : 1.0;
+  const traction = clamp(baseTraction * tireGrip * widthGrip * drivenAxleGrip * lockerGrip, .25, 1.18);
+  $('surfaceValue').textContent = surface;
+  $('driveMode').textContent = v.drivetrain === '4lo' ? '4LO' : v.drivetrain.toUpperCase() + (v.diffLock === 'locked' ? ' LOCK' : '');
+  $('tractionValue').textContent = 'GRIP ' + Math.round(traction * 100) + '%';
   let acceleration=0;
   const currentHP=hpAt(state.rpm);
   if(throttle) {
-    const driveForce=currentHP*745.7*.82/Math.max(5,Math.abs(state.speed));
-    acceleration=Math.min(traction*7.2,driveForce/v.mass);
+    const gearRatios = [3.25, 2.10, 1.45, 1.00, .76, .62];
+    const lowRangeMultiplier = v.drivetrain === '4lo' ? 2.15 : 1;
+    const wheelTorque = torqueAt(state.rpm) * v.finalDrive * gearRatios[state.gear - 1] * lowRangeMultiplier;
+    const driveForce = wheelTorque / Math.max(.3, v.tireRadius);
+    acceleration = Math.min(traction * 7.6, driveForce / v.mass);
   }
   if(reverse) acceleration-=state.speed>0?Math.min(8,state.speed*2.2+1):Math.min(3.3,Math.abs(state.speed)*1.7+1);
   if(brake) acceleration-=Math.sign(state.speed)*Math.min(11,Math.abs(state.speed)*3+1);
   if(!throttle&&!reverse&&!brake) acceleration-=Math.sign(state.speed)*Math.min(1.5,Math.abs(state.speed)*.4);
   if(inp.handbrake) acceleration-=Math.sign(state.speed)*Math.min(4,Math.abs(state.speed)*1.8);
   state.speed+=acceleration*dt;
-  state.speed=clamp(state.speed,-10,55);
+  const speedLimit = v.drivetrain === '4lo' ? 9.5 : 55;
+  state.speed=clamp(state.speed,-speedLimit,speedLimit);
   const speedFactor=clamp(Math.abs(state.speed)/3.2,.12,1);
   const steerRate=(.24+Math.abs(state.speed)*.034)*(1+(inp.handbrake ? .8 : 0));
   state.yaw+=steer*steerRate*speedFactor*dt*(state.speed<-.2?-1:1);
@@ -628,7 +709,7 @@ function updatePhysics(dt) {
   const settle=1-Math.exp(-dt*(1.6+damping*.75));
   state.bodyPitch=lerp(state.bodyPitch,targetPitch,settle);
   state.bodyRoll=lerp(state.bodyRoll,targetRoll,settle);
-  vehicleRoot.position.y=average+.98+v.rideHeight;
+  vehicleRoot.position.y=average+.98+v.rideHeight+(v.tireRadius-.59);
   vehicleRoot.rotation.set(state.bodyPitch, state.yaw, state.bodyRoll);
   wheelGround.forEach((height,i)=>{
     const localDelta=(height-average);
@@ -688,7 +769,8 @@ function animate(time) {
 }
 function init() {
   setVehiclePaint();applyGraphics();refreshHomeStats();
-  $('statusText').textContent='WORLD READY';
+  if (!realElevation) $('statusText').textContent='PROCEDURAL BACKUP TERRAIN';
+  else $('statusText').textContent='REAL ELEVATION · REDWOOD RIDGE';
   state.worldReady=true;
   requestAnimationFrame(animate);
 }
