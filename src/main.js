@@ -160,7 +160,7 @@ function makeDirtTexture() {
 
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
-const terrainGeo = new THREE.PlaneGeometry(390, 390, 110, 110);
+const terrainGeo = new THREE.PlaneGeometry(390, 390, 160, 160);
 terrainGeo.rotateX(-Math.PI / 2);
 const terrainPos = terrainGeo.attributes.position;
 const terrainColors = [];
@@ -235,7 +235,7 @@ function roadDistance(x, z) {
   }
   return Math.sqrt(min);
 }
-for (let i = 0; i < 145; i++) {
+for (let i = 0; i < 260; i++) {
   const x = (Math.random()-.5)*300, z = (Math.random()-.5)*300;
   if (roadDistance(x,z) < 10 || Math.hypot(x,z) < 9) continue;
   const h = terrainHeight(x,z);
@@ -246,7 +246,7 @@ for (let i = 0; i < 145; i++) {
   tree.position.set(x,h,z); tree.rotation.y=Math.random()*Math.PI*2; tree.scale.setScalar(.75+Math.random()*.8);
   foliageGroup.add(tree);
 }
-for (let i = 0; i < 60; i++) {
+for (let i = 0; i < 115; i++) {
   const x=(Math.random()-.5)*180, z=(Math.random()-.5)*180;
   if (roadDistance(x,z)<8) continue;
   const rock=new THREE.Mesh(rockGeo,rockMats[Math.floor(Math.random()*rockMats.length)]);
