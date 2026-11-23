@@ -29,7 +29,8 @@ const state = {
   lastTime: 0,
   fpsSamples: [],
   input: { left: false, right: false, throttle: false, brake: false, reverse: false, handbrake: false },
-  worldReady: false
+  worldReady: false,
+  trial: { active: false, startedAt: 0, checkpoint: 0, checkpoints: [100,210,320,430,5], best: Number(localStorage.getItem('trailforge-trial-best') || 0) }
 };
 try {
   const saved = JSON.parse(localStorage.getItem('trailforge-save-v1') || 'null');
@@ -198,6 +199,21 @@ for (let i = 0; i < 60; i++) {
   foliageGroup.add(rock);
 }
 
+const checkpointMarkers = new THREE.Group();
+worldGroup.add(checkpointMarkers);
+const checkpointIndices = [100,210,320,430,5];
+checkpointIndices.forEach((index,i)=>{
+  const p=roadSamples[index % roadSamples.length];
+  const tangent=trailCurve.getTangentAt((index % roadSamples.length)/roadSamples.length).normalize();
+  const gate=new THREE.Group();
+  gate.position.set(p.x,terrainHeight(p.x,p.z),p.z);
+  gate.rotation.y=Math.atan2(tangent.x,-tangent.z);
+  const material=new THREE.MeshStandardMaterial({color:i===4?0xff9252:0xc5f36b,emissive:i===4?0x7b3515:0x354f12,emissiveIntensity:1.2,roughness:.35});
+  const postGeo=new THREE.BoxGeometry(.18,3.4,.18), beamGeo=new THREE.BoxGeometry(10.8,.18,.18);
+  const left=new THREE.Mesh(postGeo,material),right=new THREE.Mesh(postGeo,material),beam=new THREE.Mesh(beamGeo,material);
+  left.position.set(-5.3,1.7,0);right.position.set(5.3,1.7,0);beam.position.set(0,3.4,0);
+  gate.add(left,right,beam); checkpointMarkers.add(gate);
+});
 const vehicleRoot = new THREE.Group();
 scene.add(vehicleRoot);
 const bodyMaterial = new THREE.MeshStandardMaterial({ color: state.vehicle.paint, metalness: .32, roughness: .34 });
@@ -486,15 +502,18 @@ function closeGarage() {
   if(state.returnToDrive) { state.mode='drive'; state.paused=false; $('driveHud').classList.remove('hidden'); }
   else { state.mode='home'; $('homeScreen').classList.remove('hidden'); }
 }
-function startDrive() {
+function startDrive(isTrial=false) {
   state.mode='drive';state.paused=false;
+  state.trial.active=!!isTrial;
+  if(isTrial){state.trial.startedAt=performance.now();state.trial.checkpoint=0;$('trialCard').classList.remove('hidden');}else{$('trialCard').classList.add('hidden');}
   $('homeScreen').classList.add('hidden');$('garagePanel').classList.add('hidden');$('pauseScreen').classList.add('hidden');
   $('driveHud').classList.remove('hidden');
-  toast('LOW RANGE READY — FIND YOUR LINE');
+  toast(isTrial?'TIME TRIAL STARTED — HIT EVERY GATE':'LOW RANGE READY — FIND YOUR LINE');
 }
 function pauseDrive() { state.paused=true;$('pauseScreen').classList.remove('hidden'); }
 function resumeDrive() { state.paused=false;$('pauseScreen').classList.add('hidden'); }
-$('driveButton').addEventListener('click',startDrive);
+$('driveButton').addEventListener('click',()=>startDrive(false));
+$('trialButton').addEventListener('click',()=>startDrive(true));
 $('garageButton').addEventListener('click',()=>{state.mode='home';openGarage();});
 $('quickTuneButton').addEventListener('click',()=>{state.mode='home';openGarage();});
 $('menuButton').addEventListener('click',openGarage);
@@ -573,6 +592,23 @@ function updatePhysics(dt) {
   vehicleRoot.position.x=clamp(vehicleRoot.position.x,-178,178);
   vehicleRoot.position.z=clamp(vehicleRoot.position.z,-178,178);
   state.distance+=Math.abs(state.speed)*dt;
+  if(state.trial.active){
+    const idx=state.trial.checkpoints[state.trial.checkpoint];
+    const point=roadSamples[idx];
+    const d=Math.hypot(vehicleRoot.position.x-point.x,vehicleRoot.position.z-point.z);
+    if(d<11){
+      state.trial.checkpoint++;
+      if(state.trial.checkpoint>=state.trial.checkpoints.length){
+        state.trial.active=false;
+        const elapsed=(performance.now()-state.trial.startedAt)/1000;
+        if(!state.trial.best||elapsed<state.trial.best){state.trial.best=elapsed;localStorage.setItem('trailforge-trial-best',String(elapsed));toast('NEW PERSONAL BEST — '+elapsed.toFixed(2)+' SEC');}else toast('TRIAL COMPLETE — '+elapsed.toFixed(2)+' SEC');
+        $('trialProgress').textContent='FINISH — BEST '+state.trial.best.toFixed(2)+' SEC';
+      }else toast('CHECKPOINT '+state.trial.checkpoint+' / 4');
+    }
+    const elapsed=(performance.now()-state.trial.startedAt)/1000;
+    $('trialTime').textContent=elapsed.toFixed(1)+' SEC';
+    if(state.trial.active) $('trialProgress').textContent='CHECKPOINT '+(state.trial.checkpoint+1)+' / 4';
+  }
   state.wheelSpin+=state.speed*dt/Math.max(.25,v.tireRadius);
   const c=Math.cos(state.yaw), s=Math.sin(state.yaw);
   const wheelGround=[];
