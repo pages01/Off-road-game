@@ -12,7 +12,8 @@ If this is the first Pages deployment and the workflow reports that Pages is not
 
 ## Controls
 
-- **Touch:** left/right steering, throttle, brake, reverse.
+- **Touch:** left/right steering, throttle, brake, reverse, and e-brake.
+- **Time Trial:** use START TIME TRIAL to run through four checkpoints and finish; your best time is saved locally.
 - **Keyboard:** WASD or arrow keys; hold **R** for reverse and **Shift** for handbrake.
 - **Camera:** use the CAM button to toggle chase and cockpit views.
 - **Garage:** tune the build, engine, suspension, and graphics.
@@ -26,11 +27,11 @@ If this is the first Pages deployment and the workflow reports that Pages is not
 - Engine lab with adjustable cylinder count, bore, stroke, compression, boost, cam profile, rev limiter, ECU tune, and a live estimated horsepower/torque dyno.
 - Suspension tuning for ride height, travel, spring rate, compression/rebound damping, and anti-roll stiffness.
 - Graphics controls for render scale, draw distance, shadows, foliage, filtering, and frame-rate target.
-- Local build saving and a small service-worker shell cache.
+- Local build saving, time-trial best-time saving, and a small service-worker shell cache.
 
 ## Important scope notes
 
-This is a playable early prototype, not a finished commercial simulator. Vehicle dynamics and engine curves are game approximations; they are not suitable for real vehicle design or tuning. The first build has one truck and one environment. Procedural scene geometry keeps the download small, but it is not equivalent to a professionally art-directed, high-resolution asset library. Three.js is loaded from jsDelivr, so the first launch requires an internet connection even though the local application shell is cached.
+This is a playable early prototype, not a finished commercial simulator. A timed checkpoint mode has been added, but the checkpoints and time-trial flow have not yet been play-tested in a live browser. Vehicle dynamics and engine curves are game approximations; they are not suitable for real vehicle design or tuning. The first build has one truck and one environment. Procedural scene geometry keeps the download small, but it is not equivalent to a professionally art-directed, high-resolution asset library. Three.js is loaded from jsDelivr, so the first launch requires an internet connection even though the local application shell is cached.
 
 ## Technology
 
