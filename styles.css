@@ -225,3 +225,10 @@ button { color: inherit; cursor: pointer; }
   .orientation-hint { position: absolute; z-index: 5; right: 12px; bottom: 16px; display: none; color: rgba(255,255,255,.58); font: 7px var(--mono); }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+
+/* Trailforge timed challenge HUD */
+.trial-card { position:absolute; top:92px; left:220px; min-width:175px; padding:12px 15px; border-radius:3px; display:flex; flex-direction:column; gap:5px; }
+.trial-card small { color:#a7b8ac; font:8px var(--mono); letter-spacing:1px; }
+.trial-card strong { color:var(--lime); font:700 27px var(--display); }
+.trial-card span { color:#d4dfd4; font:9px var(--mono); letter-spacing:.7px; }
+@media(max-width:760px) { .trial-card { top:84px; left:12px; min-width:138px; padding:9px 11px; } .trial-card strong { font-size:23px; } }
